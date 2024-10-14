@@ -1,255 +1,282 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
+  StyleSheet,
   View,
   Text,
-  StyleSheet,
-  TouchableOpacity,
+  Button,
   FlatList,
+  Alert,
   Modal,
   TextInput,
-  Button,
 } from "react-native";
-import moment from "moment";
+import { Calendar } from "react-native-calendars";
+import * as CalendarAPI from "expo-calendar";
+import DateTimePicker from "@react-native-community/datetimepicker";
 
-const Calendar = () => {
-  const [currentMonth, setCurrentMonth] = useState(moment());
-  const [selectedDate, setSelectedDate] = useState(
-    moment().format("YYYY-MM-DD")
-  );
-  const [showModal, setShowModal] = useState(false);
-  const [newTask, setNewTask] = useState("");
-  const [tasks, setTasks] = useState({}); // 날짜별로 일정을 저장
+export default function App() {
+  const [calendars, setCalendars] = useState([]);
+  const [selectedCalendarId, setSelectedCalendarId] = useState(null);
+  const [events, setEvents] = useState({});
+  const [selectedDate, setSelectedDate] = useState("");
+  const [isModalVisible, setModalVisible] = useState(false);
+  const [newEventTitle, setNewEventTitle] = useState("");
+  const [startTime, setStartTime] = useState(new Date());
+  const [endTime, setEndTime] = useState(new Date());
+  const [tempStartTime, setTempStartTime] = useState(new Date());
+  const [tempEndTime, setTempEndTime] = useState(new Date());
 
-  // 월의 첫 번째 날을 가져오고, 해당 주의 일요일까지의 날짜를 포함합니다.
-  const daysInMonth = () => {
-    const start = currentMonth.clone().startOf("month").startOf("week");
-    const end = currentMonth.clone().endOf("month").endOf("week");
-    const days = [];
+  useEffect(() => {
+    (async () => {
+      const { status } = await CalendarAPI.requestCalendarPermissionsAsync();
+      if (status === "granted") {
+        const calendarsData = await CalendarAPI.getCalendarsAsync(
+          CalendarAPI.EntityTypes.EVENT
+        );
+        setCalendars(calendarsData);
+        if (calendarsData.length > 0) {
+          setSelectedCalendarId(calendarsData[0].id);
+          loadEvents(calendarsData[0].id);
+        }
+      } else {
+        Alert.alert("권한 오류", "캘린더 접근 권한을 허용해야 합니다.");
+      }
+    })();
+  }, []);
 
-    for (
-      let date = start;
-      date.isBefore(end.clone().add(1, "day"));
-      date.add(1, "day")
-    ) {
-      days.push(date.clone());
-    }
-    return days;
-  };
+  const loadEvents = async (calendarId) => {
+    const start = new Date();
+    const end = new Date();
+    end.setMonth(end.getMonth() + 1); // 다음 달로 설정
 
-  const days = daysInMonth();
-
-  const handleDateSelect = (date) => {
-    setSelectedDate(date.format("YYYY-MM-DD"));
-    setShowModal(true);
-  };
-
-  const addTask = () => {
-    if (newTask.trim()) {
-      const updatedTasks = {
-        ...tasks,
-        [selectedDate]: [...(tasks[selectedDate] || []), newTask],
-      };
-      setTasks(updatedTasks);
-      setNewTask("");
-      setShowModal(false);
-    }
-  };
-
-  const renderTaskItem = (task, index) => (
-    <Text key={index} style={styles.taskItem}>
-      {task}
-    </Text>
-  );
-
-  const renderDay = (day) => {
-    const formattedDate = day.format("YYYY-MM-DD");
-    const hasTasks = tasks[formattedDate]
-      ? tasks[formattedDate].length > 0
-      : false;
-    const isCurrentMonth = day.month() === currentMonth.month(); // 현재 월의 날짜인지 확인
-
-    return (
-      <TouchableOpacity
-        style={[styles.dayButton, !isCurrentMonth && styles.otherMonthDay]} // 현재 월이 아닐 경우 스타일 적용
-        onPress={() => isCurrentMonth && handleDateSelect(day)} // 현재 월의 날짜만 클릭 가능
-      >
-        <Text style={styles.dayText}>{day.format("D")}</Text>
-        {hasTasks && <Text style={styles.taskIndicator}>•</Text>}
-      </TouchableOpacity>
+    const eventsData = await CalendarAPI.getEventsAsync(
+      [calendarId],
+      start,
+      end
     );
+
+    const groupedEvents = eventsData.reduce((acc, event) => {
+      const date = event.startDate.split("T")[0];
+      if (!acc[date]) {
+        acc[date] = [];
+      }
+      acc[date].push(event);
+      return acc;
+    }, {});
+
+    setEvents(groupedEvents);
   };
 
-  const renderWeekday = (weekday) => {
-    return (
-      <View style={styles.weekdayContainer}>
-        <Text style={styles.weekdayText}>{weekday}</Text>
-      </View>
-    );
+  const onDayPress = (day) => {
+    setSelectedDate(day.dateString);
+    setModalVisible(true);
   };
 
-  const goToPreviousMonth = () => {
-    setCurrentMonth(currentMonth.clone().subtract(1, "month"));
+  const addEvent = async () => {
+    if (!newEventTitle) {
+      Alert.alert("이벤트 제목이 필요합니다.");
+      return;
+    }
+
+    const startDate = new Date(selectedDate);
+    startDate.setHours(startTime.getHours(), startTime.getMinutes());
+    const endDate = new Date(selectedDate);
+    endDate.setHours(endTime.getHours(), endTime.getMinutes());
+
+    await CalendarAPI.createEventAsync(selectedCalendarId, {
+      title: newEventTitle,
+      startDate,
+      endDate,
+      timeZone: "GMT",
+    });
+
+    setNewEventTitle("");
+    loadEvents(selectedCalendarId);
+    setModalVisible(false);
   };
 
-  const goToNextMonth = () => {
-    setCurrentMonth(currentMonth.clone().add(1, "month"));
+  const handleStartTimeChange = (event, selectedDate) => {
+    if (selectedDate) {
+      setTempStartTime(selectedDate);
+      setStartTime(selectedDate); // 자동으로 startTime 설정
+    }
+  };
+
+  const handleEndTimeChange = (event, selectedDate) => {
+    if (selectedDate) {
+      setTempEndTime(selectedDate);
+      setEndTime(selectedDate); // 자동으로 endTime 설정
+    }
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={goToPreviousMonth}>
-          <Text style={styles.arrow}>{"<"}</Text>
-        </TouchableOpacity>
-        <Text style={styles.monthText}>{currentMonth.format("MMMM YYYY")}</Text>
-        <TouchableOpacity onPress={goToNextMonth}>
-          <Text style={styles.arrow}>{">"}</Text>
-        </TouchableOpacity>
-      </View>
+      <Text style={styles.header}>캘린더</Text>
+      <Calendar
+        onDayPress={onDayPress}
+        markingType={"multi-dot"}
+        markedDates={Object.keys(events).reduce((acc, date) => {
+          acc[date] = {
+            dots: events[date].map((event) => ({ color: "blue" })),
+          };
+          return acc;
+        }, {})}
+        theme={{
+          backgroundColor: "#ffffff",
+          calendarBackground: "#ffffff",
+          textSectionTitleColor: "#b6c1cd",
+          textSectionTitleDisabledColor: "#d9e1e8",
+          selectedDayBackgroundColor: "#007AFF",
+          todayTextColor: "#007AFF",
+          dayTextColor: "#2d4150",
+          textDisabledColor: "#d9e1e8",
+          dotColor: "#007AFF",
+          selectedDotColor: "#ffffff",
+          arrowColor: "#007AFF",
+          monthTextColor: "#2d4150",
+          indicatorColor: "#007AFF",
+        }}
+        style={styles.calendar}
+      />
 
-      {/* 요일 표시 */}
-      <View style={styles.weekdaysContainer}>
-        {moment.weekdaysShort().map((day) => renderWeekday(day))}
-      </View>
-
-      <View style={styles.daysContainer}>
-        <FlatList
-          data={days}
-          renderItem={({ item }) => renderDay(item)}
-          keyExtractor={(item) => item.format("YYYY-MM-DD")}
-          numColumns={7} // 1주일에 7일 표시
-        />
-      </View>
-
-      {/* 일정 추가 모달 */}
-      <Modal visible={showModal} transparent={true} animationType="slide">
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{selectedDate}에 일정 추가</Text>
+      <Modal visible={isModalVisible} animationType="slide" transparent={true}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <Text style={styles.modalHeader}>일정 추가: {selectedDate}</Text>
             <TextInput
               style={styles.input}
-              placeholder="일정 입력"
-              value={newTask}
-              onChangeText={setNewTask}
+              placeholder="일정 제목"
+              value={newEventTitle}
+              onChangeText={setNewEventTitle}
             />
-            <Button title="추가" onPress={addTask} />
-            <Button
-              title="취소"
-              onPress={() => setShowModal(false)}
-              color="red"
-            />
-            {/* 저장된 일정 목록 표시 */}
-            <View style={styles.taskListContainer}>
-              <Text style={styles.taskListTitle}>저장된 일정:</Text>
-              {tasks[selectedDate] && tasks[selectedDate].length > 0 ? (
-                <FlatList
-                  data={tasks[selectedDate]}
-                  renderItem={({ item, index }) => renderTaskItem(item, index)}
-                  keyExtractor={(item, index) => index.toString()}
-                />
-              ) : (
-                <Text style={styles.noTasksText}>일정이 없습니다.</Text>
-              )}
+            <View style={styles.timeContainer}>
+              <Text>시작 시간:</Text>
+              <DateTimePicker
+                value={tempStartTime}
+                mode="time"
+                is24Hour={true}
+                onChange={handleStartTimeChange}
+              />
+            </View>
+            <View style={styles.timeContainer}>
+              <Text>종료 시간:</Text>
+              <DateTimePicker
+                value={tempEndTime}
+                mode="time"
+                is24Hour={true}
+                onChange={handleEndTimeChange}
+              />
+            </View>
+            <View style={styles.buttonContainer}>
+              <Button title="추가" onPress={addEvent} />
+              <Button
+                title="취소"
+                onPress={() => setModalVisible(false)}
+                color="red"
+              />
             </View>
           </View>
         </View>
       </Modal>
+
+      <Text style={styles.subHeader}>이번 달 일정</Text>
+      <FlatList
+        data={Object.values(events).flat()} // 모든 이벤트를 한 리스트로 만들기
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <View style={styles.eventItem}>
+            <Text style={styles.eventTitle}>{item.title}</Text>
+            <Text style={styles.eventDate}>
+              {new Date(item.startDate).toLocaleString()} -{" "}
+              {new Date(item.endDate).toLocaleString()}
+            </Text>
+          </View>
+        )}
+      />
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    backgroundColor: "#fff",
+    backgroundColor: "#e6f7ff",
   },
   header: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 20,
-  },
-  monthText: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: "bold",
+    marginVertical: 10,
+    textAlign: "center",
+    color: "#007AFF",
   },
-  arrow: {
-    fontSize: 20,
-  },
-  weekdaysContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  weekdayContainer: {
-    flex: 1,
-    alignItems: "center",
-  },
-  weekdayText: {
-    fontSize: 16,
-    fontWeight: "bold",
-  },
-  daysContainer: {
-    flex: 1,
-  },
-  dayButton: {
-    flex: 1,
-    padding: 10,
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#fff",
-    margin: 2,
-  },
-  dayText: {
-    fontSize: 16,
-  },
-  otherMonthDay: {
-    backgroundColor: "#f0f0f0", // 이전/다음 월의 날짜를 구분할 색상
-  },
-  taskIndicator: {
-    color: "green",
+  subHeader: {
     fontSize: 18,
+    fontWeight: "bold",
+    marginVertical: 15,
+    color: "#007AFF",
   },
-  modalContainer: {
+  calendar: {
+    borderRadius: 20,
+    overflow: "hidden",
+  },
+  modalOverlay: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
     backgroundColor: "rgba(0, 0, 0, 0.5)",
   },
-  modalContent: {
-    width: "80%",
-    backgroundColor: "white",
+  modalContainer: {
+    width: "90%",
+    maxHeight: "80%",
+    backgroundColor: "#ffffff",
+    borderRadius: 20,
     padding: 20,
-    borderRadius: 10,
+    elevation: 5,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
   },
-  modalTitle: {
-    fontSize: 20,
-    marginBottom: 15,
+  modalHeader: {
+    fontSize: 24,
+    marginBottom: 10,
+    textAlign: "center",
   },
   input: {
     borderWidth: 1,
     borderColor: "#ccc",
     borderRadius: 10,
     padding: 10,
-    marginBottom: 20,
+    marginBottom: 15,
     fontSize: 16,
   },
-  taskListContainer: {
-    marginTop: 15,
+  timeContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 15,
   },
-  taskListTitle: {
+  buttonContainer: {
+    flexDirection: "row",
+    justifyContent: "space-evenly",
+    marginBottom: 10,
+  },
+  eventItem: {
+    padding: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: "#ccc",
+    backgroundColor: "#ffffff", // 배경색 추가
+    borderRadius: 10, // 둥근 모서리
+    marginBottom: 10, // 각 이벤트 간격
+    elevation: 2, // 그림자 효과 추가
+  },
+  eventTitle: {
     fontSize: 16,
-    fontWeight: "bold",
+    fontWeight: "bold", // 굵게 변경
+    color: "#007AFF", // 제목 색상 변경
   },
-  taskItem: {
-    fontSize: 14,
-  },
-  noTasksText: {
-    fontStyle: "italic",
-    color: "gray",
+  eventDate: {
+    color: "#555",
+    fontSize: 14, // 글자 크기 조정
   },
 });
-
-export default Calendar;

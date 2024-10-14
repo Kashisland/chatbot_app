@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -11,12 +11,22 @@ import {
   Keyboard,
   TouchableWithoutFeedback,
 } from "react-native";
+import * as Speech from "expo-speech"; // expo-speech 모듈을 import
 
 const ChatbotPage = () => {
   const [messages, setMessages] = useState([
-    { id: "1", text: "안녕하세요! 무엇을 도와드릴까요?", sender: "bot" },
+    {
+      id: "1",
+      text: "원하시는 상황을 입력해주세요.",
+      sender: "bot",
+    },
   ]);
   const [inputText, setInputText] = useState("");
+
+  // 앱이 처음 로드될 때 TTS로 첫 메시지를 읽어줌
+  useEffect(() => {
+    Speech.speak("안녕하세요! 원하시는 상황을 입력해주세요!");
+  }, []);
 
   const sendMessage = () => {
     if (inputText.trim()) {
@@ -36,6 +46,9 @@ const ChatbotPage = () => {
           sender: "bot",
         };
         setMessages((prevMessages) => [...prevMessages, botResponse]);
+
+        // 챗봇의 응답을 TTS로 읽어줌
+        Speech.speak("챗봇의 응답입니다.");
       }, 1000);
     }
   };
@@ -55,9 +68,8 @@ const ChatbotPage = () => {
     <KeyboardAvoidingView
       style={styles.container}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 70} // 키보드에 따라 입력창이 올라가도록 여유 공간 추가
+      keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 70}
     >
-      {/* 키보드 외 다른 영역을 터치하면 키보드가 내려가도록 처리 */}
       <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
         <View style={styles.innerContainer}>
           <FlatList
@@ -72,6 +84,7 @@ const ChatbotPage = () => {
               value={inputText}
               onChangeText={setInputText}
               placeholder="메시지를 입력하세요"
+              placeholderTextColor="#aaa"
             />
             <TouchableOpacity style={styles.sendButton} onPress={sendMessage}>
               <Text style={styles.sendButtonText}>전송</Text>
@@ -86,32 +99,37 @@ const ChatbotPage = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#fff",
+    backgroundColor: "#e6f7ff", // 부드러운 배경 색상
   },
   innerContainer: {
     flex: 1,
-    justifyContent: "space-between", // 입력창이 화면 아래에 위치하도록 설정
+    justifyContent: "space-between",
   },
   messageList: {
     flex: 1,
     padding: 10,
   },
   messageContainer: {
-    marginVertical: 5,
-    padding: 10,
-    borderRadius: 10,
+    marginVertical: 8,
+    padding: 15,
+    borderRadius: 15, // 둥근 모서리
     maxWidth: "80%",
+    elevation: 5, // 그림자 효과 (안드로이드)
+    shadowColor: "#000", // 그림자 색상 (iOS)
+    shadowOffset: { width: 0, height: 2 }, // 그림자 오프셋
+    shadowOpacity: 0.3, // 그림자 불투명도
+    shadowRadius: 4, // 그림자 반경
   },
   userMessage: {
     alignSelf: "flex-end",
-    backgroundColor: "#DCF8C6",
+    backgroundColor: "#cce5ff", // 사용자 메시지 색상
   },
   botMessage: {
     alignSelf: "flex-start",
-    backgroundColor: "#EAEAEA",
+    backgroundColor: "#eaeaea", // 챗봇 메시지 색상
   },
   messageText: {
-    fontSize: 16,
+    fontSize: 17, // 글자 크기 증가
   },
   inputContainer: {
     flexDirection: "row",
@@ -122,10 +140,10 @@ const styles = StyleSheet.create({
   textInput: {
     flex: 1,
     borderWidth: 1,
-    borderColor: "#ccc",
+    borderColor: "#007AFF",
     borderRadius: 20,
     padding: 10,
-    fontSize: 16,
+    fontSize: 18, // 글자 크기 증가
   },
   sendButton: {
     justifyContent: "center",
@@ -134,11 +152,11 @@ const styles = StyleSheet.create({
     backgroundColor: "#007AFF",
     borderRadius: 20,
     paddingHorizontal: 15,
-    paddingVertical: 10,
+    paddingVertical: 12, // 패딩 증가
   },
   sendButtonText: {
     color: "#fff",
-    fontSize: 16,
+    fontSize: 18, // 글자 크기 증가
   },
 });
 
